@@ -1,5 +1,3 @@
-import thread.DL.*;
-
 import java.util.*;
 
 public class Practise {
