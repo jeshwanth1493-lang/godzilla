@@ -3,10 +3,8 @@ pipeline {
     agent any
 
     environment {
-        SERVER = '192.168.210.129'
-        USER = 'Admin'
-        DEPLOY_DIR = '/C:/apps/employee-service'
-        SERVICE = 'EmployeeService'
+        IMAGE_NAME = "jeshwanth1493/employee-service"
+        IMAGE_TAG = "${BUILD_NUMBER}"
     }
 
     stages {
@@ -17,82 +15,50 @@ pipeline {
             }
         }
 
-        stage('Build') {
+        stage('Docker Build') {
             steps {
                 dir('employee-service') {
-                    sh '''
-                        chmod +x mvnw
-                        ./mvnw clean package
-                    '''
+                    sh """
+                    docker build \
+                      -t ${IMAGE_NAME}:${IMAGE_TAG} \
+                      -t ${IMAGE_NAME}:latest .
+                    """
                 }
             }
         }
 
-        stage('Archive') {
+        stage('Docker Push') {
             steps {
-                archiveArtifacts artifacts: 'employee-service/target/employee-service.jar',
-                                 fingerprint: true
-            }
-        }
 
-        stage('Stop Service') {
-            steps {
-                sh '''
-                ssh ${USER}@${SERVER} \
-                "powershell Stop-Service EmployeeService -Force"
-                '''
-            }
-        }
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )
+                ]) {
 
-        stage('Deploy to Windows') {
-            steps {
-                sh '''
-                scp employee-service/target/employee-service.jar \
-                ${USER}@${SERVER}:${DEPLOY_DIR}/employee-service.jar
-                '''
-            }
-        }
+                    sh '''
+                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
 
-        stage('Start Service') {
-            steps {
-                sh '''
-                ssh ${USER}@${SERVER} \
-                "powershell Start-Service EmployeeService"
-                '''
-            }
-        }
+                    docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                    docker push ${IMAGE_NAME}:latest
 
-        stage('Restart Service') {
-            steps {
-                sh '''
-                    ssh ${USER}@${SERVER} \
-                    "powershell Restart-Service ${SERVICE} -Force"
-                '''
-            }
-        }
+                    docker logout
+                    '''
+                }
 
-        stage('Wait For Startup') {
-            steps {
-                sleep(time: 10, unit: 'SECONDS')
-            }
-        }
-
-        stage('Health Check') {
-            steps {
-                sh '''
-                    curl --fail http://${SERVER}:8080/actuator/health
-                '''
             }
         }
     }
 
     post {
         success {
-            echo '🚀 Deployment Successful!'
+            echo "Docker image pushed successfully."
         }
 
         failure {
-            echo '❌ Deployment Failed!'
+            echo "Pipeline failed."
         }
     }
 }

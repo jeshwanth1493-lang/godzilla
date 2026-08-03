@@ -1,0 +1,98 @@
+pipeline {
+
+    agent any
+
+    environment {
+        SERVER = '192.168.210.129'
+        USER = 'Admin'
+        DEPLOY_DIR = '/C:/apps/employee-service'
+        SERVICE = 'EmployeeService'
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build') {
+            steps {
+                dir('employee-service') {
+                    sh '''
+                        chmod +x mvnw
+                        ./mvnw clean package
+                    '''
+                }
+            }
+        }
+
+        stage('Archive') {
+            steps {
+                archiveArtifacts artifacts: 'employee-service/target/employee-service.jar',
+                                 fingerprint: true
+            }
+        }
+
+        stage('Stop Service') {
+            steps {
+                sh '''
+                ssh ${USER}@${SERVER} \
+                "powershell Stop-Service EmployeeService -Force"
+                '''
+            }
+        }
+
+        stage('Deploy to Windows') {
+            steps {
+                sh '''
+                scp employee-service/target/employee-service.jar \
+                ${USER}@${SERVER}:${DEPLOY_DIR}/employee-service.jar
+                '''
+            }
+        }
+
+        stage('Start Service') {
+            steps {
+                sh '''
+                ssh ${USER}@${SERVER} \
+                "powershell Start-Service EmployeeService"
+                '''
+            }
+        }
+
+        stage('Restart Service') {
+            steps {
+                sh '''
+                    ssh ${USER}@${SERVER} \
+                    "powershell Restart-Service ${SERVICE} -Force"
+                '''
+            }
+        }
+
+        stage('Wait For Startup') {
+            steps {
+                sleep(time: 10, unit: 'SECONDS')
+            }
+        }
+
+        stage('Health Check') {
+            steps {
+                sh '''
+                    curl --fail http://${SERVER}:8080/actuator/health
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '🚀 Deployment Successful!'
+        }
+
+        failure {
+            echo '❌ Deployment Failed!'
+        }
+    }
+}
