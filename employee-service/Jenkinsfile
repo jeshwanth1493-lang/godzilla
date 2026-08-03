@@ -4,7 +4,7 @@ pipeline {
 
     environment {
         IMAGE_NAME = "jeshwanth1493/employee-service"
-        IMAGE_TAG = "${BUILD_NUMBER}"
+        IMAGE_TAG  = "${BUILD_NUMBER}"
     }
 
     stages {
@@ -19,9 +19,9 @@ pipeline {
             steps {
                 dir('employee-service') {
                     sh """
-                    docker build \
-                      -t ${IMAGE_NAME}:${IMAGE_TAG} \
-                      -t ${IMAGE_NAME}:latest .
+                        docker build \
+                          -t ${IMAGE_NAME}:${IMAGE_TAG} \
+                          -t ${IMAGE_NAME}:latest .
                     """
                 }
             }
@@ -39,26 +39,41 @@ pipeline {
                 ]) {
 
                     sh '''
-                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
 
-                    docker push ${IMAGE_NAME}:${IMAGE_TAG}
-                    docker push ${IMAGE_NAME}:latest
+                        docker push ${IMAGE_NAME}:${IMAGE_TAG}
 
-                    docker logout
+                        docker push ${IMAGE_NAME}:latest
+
+                        docker logout
                     '''
                 }
+            }
+        }
 
+        stage('Cleanup') {
+            steps {
+
+                sh """
+                    docker image rm ${IMAGE_NAME}:${IMAGE_TAG} || true
+                    docker image rm ${IMAGE_NAME}:latest || true
+                """
             }
         }
     }
 
     post {
+
         success {
-            echo "Docker image pushed successfully."
+            echo "Docker image ${IMAGE_NAME}:${IMAGE_TAG} pushed successfully."
         }
 
         failure {
             echo "Pipeline failed."
+        }
+
+        always {
+            cleanWs()
         }
     }
 }
