@@ -1,5 +1,13 @@
 pipeline {
+
     agent any
+
+    environment {
+        SERVER = '192.168.210.129'
+        USER = 'Admin'
+        DEPLOY_DIR = '/C:/apps/employee-service'
+        SERVICE = 'EmployeeService'
+    }
 
     stages {
 
@@ -22,18 +30,51 @@ pipeline {
 
         stage('Archive') {
             steps {
-                archiveArtifacts artifacts: 'employee-service/target/employee-service.jar'
+                archiveArtifacts artifacts: 'employee-service/target/employee-service.jar',
+                                 fingerprint: true
+            }
+        }
+
+        stage('Deploy to Windows') {
+            steps {
+                sh '''
+                    scp employee-service/target/employee-service.jar \
+                    ${USER}@${SERVER}:${DEPLOY_DIR}/employee-service.jar
+                '''
+            }
+        }
+
+        stage('Restart Service') {
+            steps {
+                sh '''
+                    ssh ${USER}@${SERVER} \
+                    "powershell Restart-Service ${SERVICE} -Force"
+                '''
+            }
+        }
+
+        stage('Wait For Startup') {
+            steps {
+                sleep(time: 10, unit: 'SECONDS')
+            }
+        }
+
+        stage('Health Check') {
+            steps {
+                sh '''
+                    curl --fail http://${SERVER}:8080/actuator/health
+                '''
             }
         }
     }
 
     post {
         success {
-            echo 'Build Successful'
+            echo '🚀 Deployment Successful!'
         }
 
         failure {
-            echo 'Build Failed'
+            echo '❌ Deployment Failed!'
         }
     }
 }
