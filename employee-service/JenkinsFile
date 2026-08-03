@@ -1,0 +1,39 @@
+pipeline {
+    agent any
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build') {
+            steps {
+                dir('employee-service') {
+                    sh '''
+                        chmod +x mvnw
+                        ./mvnw clean package
+                    '''
+                }
+            }
+        }
+
+        stage('Archive') {
+            steps {
+                archiveArtifacts artifacts: 'employee-service/target/employee-service.jar'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Build Successful'
+        }
+
+        failure {
+            echo 'Build Failed'
+        }
+    }
+}

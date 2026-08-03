@@ -1,0 +1,15 @@
+# Build
+target/
+
+# IntelliJ
+.idea/
+*.iml
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Spring Initializr
+HELP.md
