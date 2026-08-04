@@ -18,7 +18,7 @@ public class EmployeeService {
 
         employeeMap.put(1L, Employee.builder()
                 .id(1L)
-                .firstName("Jeshwanth2314")
+                .firstName("Jeshu")
                 .lastName("Lokesh")
                 .email("jeshwanth@example.com")
                 .department("Engineering")
