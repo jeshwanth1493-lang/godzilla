@@ -42,7 +42,6 @@ pipeline {
                         echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
 
                         docker push ${IMAGE_NAME}:${IMAGE_TAG}
-
                         docker push ${IMAGE_NAME}:latest
 
                         docker logout
@@ -51,9 +50,43 @@ pipeline {
             }
         }
 
+        stage('Verify Kubernetes Access') {
+            steps {
+                sh '''
+                    echo "=================================="
+                    echo "Current Kubernetes Context"
+                    echo "=================================="
+                    kubectl config current-context
+
+                    echo ""
+                    echo "=================================="
+                    echo "Cluster Information"
+                    echo "=================================="
+                    kubectl cluster-info
+
+                    echo ""
+                    echo "=================================="
+                    echo "Nodes"
+                    echo "=================================="
+                    kubectl get nodes
+
+                    echo ""
+                    echo "=================================="
+                    echo "Deployments"
+                    echo "=================================="
+                    kubectl get deployments
+
+                    echo ""
+                    echo "=================================="
+                    echo "Pods"
+                    echo "=================================="
+                    kubectl get pods
+                '''
+            }
+        }
+
         stage('Cleanup') {
             steps {
-
                 sh """
                     docker image rm ${IMAGE_NAME}:${IMAGE_TAG} || true
                     docker image rm ${IMAGE_NAME}:latest || true
