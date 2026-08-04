@@ -1,11 +1,54 @@
+def deployToNamespace(namespace, imageName, imageTag) {
+
+    sh """
+        echo "========================================"
+        echo "Deploying ${imageName}:${imageTag}"
+        echo "Namespace : ${namespace}"
+        echo "========================================"
+
+        kubectl set image deployment/employee-service \
+            employee-service=${imageName}:${imageTag} \
+            -n ${namespace}
+
+        echo ""
+        echo "Waiting for rollout..."
+
+        kubectl rollout status deployment/employee-service \
+            -n ${namespace}
+
+        echo ""
+        echo "Current Deployment Image"
+
+        kubectl get deployment employee-service \
+            -n ${namespace} \
+            -o=jsonpath='{.spec.template.spec.containers[0].image}'
+
+        echo ""
+        echo ""
+        echo "Pods"
+
+        kubectl get pods -n ${namespace}
+
+        echo ""
+        echo ""
+        echo "Services"
+
+        kubectl get svc -n ${namespace}
+    """
+}
+
 pipeline {
 
     agent any
 
     environment {
-        IMAGE_NAME    = "jeshwanth1493/employee-service"
-        IMAGE_TAG     = "${BUILD_NUMBER}"
-        K8S_NAMESPACE = "dev"
+
+        IMAGE_NAME = "jeshwanth1493/employee-service"
+        IMAGE_TAG  = "${BUILD_NUMBER}"
+
+        DEV_NAMESPACE  = "dev"
+        QA_NAMESPACE   = "qa"
+        PROD_NAMESPACE = "prod"
     }
 
     stages {
@@ -18,21 +61,16 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                dir('employee-service') {
-                    sh """
-                        echo "=================================="
-                        echo "Building Docker Image"
-                        echo "=================================="
-
-                        docker build \
-                          -t ${IMAGE_NAME}:${IMAGE_TAG} \
-                          -t ${IMAGE_NAME}:latest .
-                    """
-                }
+                sh """
+                    docker build \
+                    -t ${IMAGE_NAME}:${IMAGE_TAG} \
+                    -t ${IMAGE_NAME}:latest .
+                """
             }
         }
 
         stage('Docker Push') {
+
             steps {
 
                 withCredentials([
@@ -44,18 +82,11 @@ pipeline {
                 ]) {
 
                     sh '''
-                        echo "=================================="
-                        echo "Logging into Docker Hub"
-                        echo "=================================="
+                        echo "$DOCKER_PASS" | docker login \
+                        -u "$DOCKER_USER" \
+                        --password-stdin
 
-                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-
-                        echo ""
-                        echo "Pushing Build Image..."
                         docker push ${IMAGE_NAME}:${IMAGE_TAG}
-
-                        echo ""
-                        echo "Pushing Latest Image..."
                         docker push ${IMAGE_NAME}:latest
 
                         docker logout
@@ -64,60 +95,57 @@ pipeline {
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Deploy to DEV') {
             steps {
+                script {
+                    deployToNamespace(
+                        DEV_NAMESPACE,
+                        IMAGE_NAME,
+                        IMAGE_TAG
+                    )
+                }
+            }
+        }
 
-                sh """
-                    echo "=================================="
-                    echo "Deploying Build ${IMAGE_TAG}"
-                    echo "Namespace : ${K8S_NAMESPACE}"
-                    echo "=================================="
+        stage('Approve QA Deployment') {
+            steps {
+                input(
+                    message: 'Deploy build to QA?',
+                    ok: 'Deploy'
+                )
+            }
+        }
 
-                    kubectl set image deployment/employee-service \
-                        employee-service=${IMAGE_NAME}:${IMAGE_TAG} \
-                        -n ${K8S_NAMESPACE}
+        stage('Deploy to QA') {
+            steps {
+                script {
+                    deployToNamespace(
+                        QA_NAMESPACE,
+                        IMAGE_NAME,
+                        IMAGE_TAG
+                    )
+                }
+            }
+        }
 
-                    echo ""
-                    echo "Waiting for Rolling Update..."
-                    kubectl rollout status deployment/employee-service \
-                        -n ${K8S_NAMESPACE}
+        stage('Approve PROD Deployment') {
+            steps {
+                input(
+                    message: 'Deploy build to Production?',
+                    ok: 'Deploy'
+                )
+            }
+        }
 
-                    echo ""
-                    echo "=================================="
-                    echo "Current Deployment Image"
-                    echo "=================================="
-
-                    kubectl get deployment employee-service \
-                        -n ${K8S_NAMESPACE} \
-                        -o=jsonpath='{.spec.template.spec.containers[0].image}'
-
-                    echo ""
-                    echo ""
-
-                    echo "=================================="
-                    echo "Pods"
-                    echo "=================================="
-
-                    kubectl get pods \
-                        -n ${K8S_NAMESPACE} \
-                        -o wide
-
-                    echo ""
-                    echo "=================================="
-                    echo "Services"
-                    echo "=================================="
-
-                    kubectl get svc \
-                        -n ${K8S_NAMESPACE}
-
-                    echo ""
-                    echo "=================================="
-                    echo "Rollout History"
-                    echo "=================================="
-
-                    kubectl rollout history deployment/employee-service \
-                        -n ${K8S_NAMESPACE}
-                """
+        stage('Deploy to PROD') {
+            steps {
+                script {
+                    deployToNamespace(
+                        PROD_NAMESPACE,
+                        IMAGE_NAME,
+                        IMAGE_TAG
+                    )
+                }
             }
         }
 
@@ -125,10 +153,6 @@ pipeline {
             steps {
 
                 sh """
-                    echo "=================================="
-                    echo "Cleaning Local Docker Images"
-                    echo "=================================="
-
                     docker image rm ${IMAGE_NAME}:${IMAGE_TAG} || true
                     docker image rm ${IMAGE_NAME}:latest || true
                 """
@@ -139,43 +163,15 @@ pipeline {
     post {
 
         success {
-            echo "=================================="
-            echo "Pipeline Completed Successfully"
-            echo "Docker Image : ${IMAGE_NAME}:${IMAGE_TAG}"
-            echo "Namespace    : ${K8S_NAMESPACE}"
-            echo "=================================="
+            echo "========================================"
+            echo "Pipeline completed successfully!"
+            echo "Image: ${IMAGE_NAME}:${IMAGE_TAG}"
+            echo "Successfully promoted to Production."
+            echo "========================================"
         }
 
         failure {
-
-            echo "Pipeline Failed"
-
-            sh """
-                echo ""
-                echo "=================================="
-                echo "Deployment Details"
-                echo "=================================="
-
-                kubectl describe deployment employee-service \
-                    -n ${K8S_NAMESPACE} || true
-
-                echo ""
-                echo "=================================="
-                echo "Pods"
-                echo "=================================="
-
-                kubectl get pods \
-                    -n ${K8S_NAMESPACE} || true
-
-                echo ""
-                echo "=================================="
-                echo "Recent Events"
-                echo "=================================="
-
-                kubectl get events \
-                    -n ${K8S_NAMESPACE} \
-                    --sort-by=.metadata.creationTimestamp | tail -20 || true
-            """
+            echo "Pipeline failed."
         }
 
         always {
