@@ -62,7 +62,9 @@ public class EmployeeController {
         Map<String, String> response = new HashMap<>();
 
         response.put("application", "employee-service");
-        response.put("version", "2.0");
+        response.put("version", System.getenv("APP_VERSION"));
+        response.put("company", System.getenv("COMPANY_NAME"));
+        response.put("environment", System.getenv("ENVIRONMENT"));
         response.put("pod", InetAddress.getLocalHost().getHostName());
 
         return ResponseEntity.ok(response);

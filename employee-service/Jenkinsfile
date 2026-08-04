@@ -3,8 +3,9 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "jeshwanth1493/employee-service"
-        IMAGE_TAG  = "${BUILD_NUMBER}"
+        IMAGE_NAME    = "jeshwanth1493/employee-service"
+        IMAGE_TAG     = "${BUILD_NUMBER}"
+        K8S_NAMESPACE = "dev"
     }
 
     stages {
@@ -19,6 +20,10 @@ pipeline {
             steps {
                 dir('employee-service') {
                     sh """
+                        echo "=================================="
+                        echo "Building Docker Image"
+                        echo "=================================="
+
                         docker build \
                           -t ${IMAGE_NAME}:${IMAGE_TAG} \
                           -t ${IMAGE_NAME}:latest .
@@ -39,9 +44,18 @@ pipeline {
                 ]) {
 
                     sh '''
+                        echo "=================================="
+                        echo "Logging into Docker Hub"
+                        echo "=================================="
+
                         echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
 
+                        echo ""
+                        echo "Pushing Build Image..."
                         docker push ${IMAGE_NAME}:${IMAGE_TAG}
+
+                        echo ""
+                        echo "Pushing Latest Image..."
                         docker push ${IMAGE_NAME}:latest
 
                         docker logout
@@ -52,34 +66,69 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
+
                 sh """
                     echo "=================================="
-                    echo "Deploying Image ${IMAGE_NAME}:${IMAGE_TAG}"
+                    echo "Deploying Build ${IMAGE_TAG}"
+                    echo "Namespace : ${K8S_NAMESPACE}"
                     echo "=================================="
 
                     kubectl set image deployment/employee-service \
-                        employee-service=${IMAGE_NAME}:${IMAGE_TAG}
+                        employee-service=${IMAGE_NAME}:${IMAGE_TAG} \
+                        -n ${K8S_NAMESPACE}
 
                     echo ""
-                    echo "Waiting for rollout to complete..."
-                    kubectl rollout status deployment/employee-service
+                    echo "Waiting for Rolling Update..."
+                    kubectl rollout status deployment/employee-service \
+                        -n ${K8S_NAMESPACE}
 
                     echo ""
-                    echo "Current Image:"
+                    echo "=================================="
+                    echo "Current Deployment Image"
+                    echo "=================================="
+
                     kubectl get deployment employee-service \
+                        -n ${K8S_NAMESPACE} \
                         -o=jsonpath='{.spec.template.spec.containers[0].image}'
 
                     echo ""
                     echo ""
-                    echo "Pods:"
-                    kubectl get pods
+
+                    echo "=================================="
+                    echo "Pods"
+                    echo "=================================="
+
+                    kubectl get pods \
+                        -n ${K8S_NAMESPACE} \
+                        -o wide
+
+                    echo ""
+                    echo "=================================="
+                    echo "Services"
+                    echo "=================================="
+
+                    kubectl get svc \
+                        -n ${K8S_NAMESPACE}
+
+                    echo ""
+                    echo "=================================="
+                    echo "Rollout History"
+                    echo "=================================="
+
+                    kubectl rollout history deployment/employee-service \
+                        -n ${K8S_NAMESPACE}
                 """
             }
         }
 
         stage('Cleanup') {
             steps {
+
                 sh """
+                    echo "=================================="
+                    echo "Cleaning Local Docker Images"
+                    echo "=================================="
+
                     docker image rm ${IMAGE_NAME}:${IMAGE_TAG} || true
                     docker image rm ${IMAGE_NAME}:latest || true
                 """
@@ -90,11 +139,43 @@ pipeline {
     post {
 
         success {
-            echo "Docker image ${IMAGE_NAME}:${IMAGE_TAG} pushed successfully."
+            echo "=================================="
+            echo "Pipeline Completed Successfully"
+            echo "Docker Image : ${IMAGE_NAME}:${IMAGE_TAG}"
+            echo "Namespace    : ${K8S_NAMESPACE}"
+            echo "=================================="
         }
 
         failure {
-            echo "Pipeline failed."
+
+            echo "Pipeline Failed"
+
+            sh """
+                echo ""
+                echo "=================================="
+                echo "Deployment Details"
+                echo "=================================="
+
+                kubectl describe deployment employee-service \
+                    -n ${K8S_NAMESPACE} || true
+
+                echo ""
+                echo "=================================="
+                echo "Pods"
+                echo "=================================="
+
+                kubectl get pods \
+                    -n ${K8S_NAMESPACE} || true
+
+                echo ""
+                echo "=================================="
+                echo "Recent Events"
+                echo "=================================="
+
+                kubectl get events \
+                    -n ${K8S_NAMESPACE} \
+                    --sort-by=.metadata.creationTimestamp | tail -20 || true
+            """
         }
 
         always {
