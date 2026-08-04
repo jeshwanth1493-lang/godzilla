@@ -7,7 +7,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.InetAddress;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/employees")
@@ -51,5 +54,17 @@ public class EmployeeController {
         employeeService.deleteEmployee(id);
 
         return ResponseEntity.ok("Employee deleted successfully.");
+    }
+
+    @GetMapping("/info")
+    public ResponseEntity<Map<String, String>> getApplicationInfo() throws Exception {
+
+        Map<String, String> response = new HashMap<>();
+
+        response.put("application", "employee-service");
+        response.put("version", "1.0");
+        response.put("pod", InetAddress.getLocalHost().getHostName());
+
+        return ResponseEntity.ok(response);
     }
 }
