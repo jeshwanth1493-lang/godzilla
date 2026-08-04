@@ -21,26 +21,21 @@ spec:
         - name: employee-service
           image: jeshwanth1493/employee-service:latest
 
-          env:
-            - name: DB_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: employee-service-secret
-                  key: DB_USERNAME
-
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: employee-service-secret
-                  key: DB_PASSWORD
-
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: employee-service-secret
-                  key: JWT_SECRET
-
-          imagePullPolicy: Always
-
           ports:
             - containerPort: 8080
+
+          env:
+            - name: APP_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: employee-config
+                  key: APP_NAME
+
+            - name: APP_ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: employee-config
+                  key: APP_ENVIRONMENT
+
+            - name: BUILD_NUMBER
+              value: "1"
