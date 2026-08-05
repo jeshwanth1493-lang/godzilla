@@ -58,6 +58,23 @@ pipeline {
                 checkout scm
             }
         }
+        stage('Build') {
+            steps {
+                sh '''
+                    mvn clean verify
+                '''
+            }
+        }
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('SonarQube') {
+                    sh '''
+                        mvn sonar:sonar \
+                        -Dsonar.projectKey=Employee-Service
+                    '''
+                }
+            }
+        }
 
         stage('Docker Build') {
             steps {
